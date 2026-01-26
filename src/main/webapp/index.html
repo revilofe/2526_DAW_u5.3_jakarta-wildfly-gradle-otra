@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CRUD de Tareas</title>
+  <style>
+    body { font-family: "Trebuchet MS", Verdana, sans-serif; background: #f3f0ea; margin: 0; color: #1f1f1f; }
+    header { background: #203647; color: #fff; padding: 24px 16px; }
+    header h1 { margin: 0; font-size: 24px; }
+    main { max-width: 900px; margin: 0 auto; padding: 24px 16px 48px; }
+    .card { background: #fff; border-radius: 12px; padding: 16px; box-shadow: 0 8px 20px rgba(0,0,0,0.08); margin-bottom: 20px; }
+    form { display: flex; gap: 8px; flex-wrap: wrap; }
+    input[type="text"] { flex: 1; padding: 10px; border-radius: 8px; border: 1px solid #c8c8c8; }
+    button { padding: 10px 14px; border: none; border-radius: 8px; background: #f09d51; color: #1f1f1f; cursor: pointer; font-weight: 600; }
+    button.secondary { background: #455a64; color: #fff; }
+    button.danger { background: #b33939; color: #fff; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { text-align: left; padding: 10px; border-bottom: 1px solid #ececec; }
+    tr:last-child td { border-bottom: none; }
+    .status { font-size: 12px; padding: 4px 8px; border-radius: 999px; display: inline-block; }
+    .status.done { background: #d1f2c0; }
+    .status.todo { background: #ffe4b5; }
+    .error { color: #b33939; margin-top: 8px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>CRUD de Tareas (fichero JSON)</h1>
+  </header>
+  <main>
+    <section class="card">
+      <h2>Nueva tarea</h2>
+      <form id="create-form">
+        <input id="title" type="text" placeholder="Titulo de la tarea" required />
+        <button type="submit">Crear</button>
+      </form>
+      <div class="error" id="create-error"></div>
+    </section>
+
+    <section class="card">
+      <h2>Listado</h2>
+      <div class="error" id="list-error"></div>
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Titulo</th>
+            <th>Estado</th>
+            <th>Acciones</th>
+          </tr>
+        </thead>
+        <tbody id="task-body"></tbody>
+      </table>
+    </section>
+  </main>
+
+  <script>
+    const basePath = window.location.pathname.replace(/\/[^/]*$/, '');
+    const apiUrl = `${basePath}/api/tasks`;
+
+    const form = document.getElementById('create-form');
+    const titleInput = document.getElementById('title');
+    const listBody = document.getElementById('task-body');
+    const createError = document.getElementById('create-error');
+    const listError = document.getElementById('list-error');
+
+    async function loadTasks() {
+      listError.textContent = '';
+      try {
+        const res = await fetch(apiUrl);
+        const tasks = await res.json();
+        render(tasks);
+      } catch (err) {
+        listError.textContent = 'No se pudo cargar el listado.';
+      }
+    }
+
+    function render(tasks) {
+      listBody.innerHTML = '';
+      tasks.forEach(task => {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+          <td>${task.id}</td>
+          <td><input type="text" value="${task.title}" data-id="${task.id}" /></td>
+          <td><span class="status ${task.done ? 'done' : 'todo'}">${task.done ? 'Hecho' : 'Pendiente'}</span></td>
+          <td>
+            <button class="secondary" data-action="toggle" data-id="${task.id}" data-done="${task.done}">Cambiar</button>
+            <button class="secondary" data-action="save" data-id="${task.id}">Guardar</button>
+            <button class="danger" data-action="delete" data-id="${task.id}">Eliminar</button>
+          </td>
+        `;
+        listBody.appendChild(row);
+      });
+    }
+
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      createError.textContent = '';
+      const title = titleInput.value.trim();
+      if (!title) {
+        createError.textContent = 'El titulo es obligatorio.';
+        return;
+      }
+      try {
+        const res = await fetch(apiUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ title, done: false })
+        });
+        if (!res.ok) {
+          const data = await res.json();
+          createError.textContent = data.message || 'Error al crear.';
+          return;
+        }
+        titleInput.value = '';
+        await loadTasks();
+      } catch (err) {
+        createError.textContent = 'Error al crear.';
+      }
+    });
+
+    listBody.addEventListener('click', async (event) => {
+      const button = event.target.closest('button');
+      if (!button) return;
+      const id = button.dataset.id;
+      const action = button.dataset.action;
+
+      if (action === 'delete') {
+        await fetch(`${apiUrl}/${id}`, { method: 'DELETE' });
+        await loadTasks();
+        return;
+      }
+
+      if (action === 'toggle') {
+        const current = button.dataset.done === 'true';
+        await updateTask(id, !current);
+        return;
+      }
+
+      if (action === 'save') {
+        const input = listBody.querySelector(`input[data-id="${id}"]`);
+        if (!input || !input.value.trim()) {
+          listError.textContent = 'El titulo no puede estar vacio.';
+          return;
+        }
+        await updateTask(id, null, input.value.trim());
+      }
+    });
+
+    async function updateTask(id, doneValue, titleValue) {
+      listError.textContent = '';
+      try {
+        const rowInput = listBody.querySelector(`input[data-id="${id}"]`);
+        const title = titleValue ?? (rowInput ? rowInput.value.trim() : '');
+        const currentDoneButton = listBody.querySelector(`button[data-action="toggle"][data-id="${id}"]`);
+        const currentDone = currentDoneButton ? currentDoneButton.dataset.done === 'true' : false;
+        const done = doneValue !== null ? doneValue : currentDone;
+        await fetch(`${apiUrl}/${id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ title, done })
+        });
+        await loadTasks();
+      } catch (err) {
+        listError.textContent = 'Error al actualizar.';
+      }
+    }
+
+    loadTasks();
+  </script>
+</body>
+</html>

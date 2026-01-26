@@ -1,0 +1,30 @@
+plugins {
+    id 'java'
+    id 'war'
+}
+
+group = 'com.example'
+version = '1.0.0'
+
+def javaVersion = JavaVersion.VERSION_17
+
+java {
+    sourceCompatibility = javaVersion
+    targetCompatibility = javaVersion
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    compileOnly 'jakarta.platform:jakarta.jakartaee-api:10.0.0'
+}
+
+war {
+    archiveFileName = 'crud-file.war'
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+}
